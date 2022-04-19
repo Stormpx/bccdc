@@ -1,0 +1,127 @@
+use std::fs;
+use url::{Url};
+use std::path::Path;
+use std::error::Error;
+use serde_json::{Value,Deserializer};
+use crate::cc::{CcSubtitle,Line};
+use std::collections::HashMap;
+
+use crate::bili;
+
+
+
+pub fn json_to_subtitle(name: &str,content: &str)-> Result<CcSubtitle,Box<dyn Error>> {
+    
+
+    let v: Value = serde_json::from_str(content)?;
+    
+    let body: &Value = &v["body"];
+    
+    let objs: &Vec<Value>=body.as_array().ok_or("body field isn't array")?;
+
+    let lines: Result<Vec<Line>,Box<dyn Error>>=objs.iter().map(|obj| {
+        let content= obj["content"].as_str().ok_or::<Box<dyn Error>>("content".into())?.to_string();
+        let start = obj["from"].as_f64().ok_or::<Box<dyn Error>>("from".into())?;
+        let end = obj["to"].as_f64().ok_or::<Box<dyn Error>>("to".into())?;
+        Ok(Line{content,start,end})
+    }).collect();
+    
+    Ok(CcSubtitle{
+        name: name.to_string(),
+        lines: lines?,
+    })
+
+}
+
+pub fn lookup_file(path: &Path)-> Result<CcSubtitle,Box<dyn Error>> {
+
+    let name = path.file_stem().unwrap().to_str().unwrap();
+    let content=fs::read_to_string(path)?;
+    json_to_subtitle(name,&content)
+
+}
+
+pub fn lookup_cc_api(url: &Url) -> Result<CcSubtitle,Box<dyn Error>>{
+    let mut file_name=url.path_segments().ok_or::<Box<dyn Error>>("url path required".into())?
+        .last().ok_or::<Box<dyn Error>>("invalid url".into())?;
+
+    if let Some(p) = file_name.rfind("."){
+        file_name= &file_name[0..p];
+    }
+
+    let content = bili::simple_http_get(url,&HashMap::new())?;
+
+    json_to_subtitle(file_name,&content)
+
+}
+
+fn find_id(ep_html: &str)-> Option<(String,u64)>{
+
+    let flag = "window.__INITIAL_STATE__=";
+    
+    let index=ep_html.find(flag)?;
+    let data = &ep_html[index+flag.len()..];
+
+    
+    let stream = Deserializer::from_str(data).into_iter::<Value>();
+
+    for value in stream {
+        if let Ok(json) = value{
+            if let  Value::Object(ep_info) = &json["epInfo"]{
+                let  bvid= &ep_info["bvid"].as_str();
+                let cid = &ep_info["cid"].as_u64();
+                if bvid.is_some() && cid.is_some(){
+                   return Some((bvid.unwrap().to_string(),cid.unwrap())); 
+                }
+            }
+
+        }
+    }
+
+    None 
+
+}
+
+pub fn lookup_ep_id(id: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
+    let content=bili::get_ep_html(id)?;
+
+    let (bvid,cid) = find_id(&content).ok_or::<Box<dyn Error>>("unable find bvid and cid".into())?;
+
+    let list= bili::get_subtitle_list(&bvid,cid)?;
+
+    
+    Err("".into())
+    
+}
+//pub fn lookup_video_id(vid: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>> {
+//   
+//}
+
+#[cfg(test)]
+mod tests{
+    use tempfile::NamedTempFile;
+    use std::fs;
+    use crate::lookup;
+    #[test]
+    fn lookup_file_test(){
+        let json= "{\"body\":[{\"content\":\"花蕾 石屑 又一輪循環\",\"from\":1341.19,\"location\":2,\"to\":1343.27}]}";
+        let tempfile=NamedTempFile::new().unwrap();
+        fs::write(&tempfile,json).expect("fail to write tempfile");
+        let temppath= tempfile.path();
+        let subtitle = crate::lookup::lookup_file(temppath).unwrap(); 
+        assert_eq!(temppath.file_name().unwrap().to_str(),Some(&subtitle.name[..]));
+        let line= &subtitle.lines[0];
+        assert_eq!("花蕾 石屑 又一輪循環",&line.content);
+        assert_eq!(1341.19,line.start);
+        assert_eq!(1343.27,line.end);
+        tempfile.close();
+    }
+
+    #[test]
+    fn find_id_test(){
+        let content = "</script><script>window.__INITIAL_STATE__={\"epInfo\":{\"aid\":937924663,\"badge\":\"会员\",\"badge_info\":{\"bg_color\":\"#FB7299\",\"bg_color_night\":\"#BB5B76\",\"text\":\"会员\"},\"badge_type\":0,\"bvid\":\"BV1zT4y1v7kC\",\"cid\":569612278,\"cover\":\"\\u002F\\u002Fi0.hdslb.com\\u002Fbfs\\u002Farchive\\u002Ff5e5f123aef7399156a6fe74d4cb7aaf97604a20.png\",\"dimension\":{\"height\":1080,\"rotate\":0,\"width\":1920},\"duration\":1421000,\"from\":\"bangumi\",\"id\":475899,\"is_view_hide\":false,\"link\":\"https:\\u002F\\u002Fwww.bilibili.com\\u002Fbangumi\\u002Fplay\\u002Fep475899\",\"long_title\":\"孔明 施展計謀\",\"pub_time\":1649340000,\"pv\":0,\"release_date\":\"\",\"rights\":{\"allow_demand\":0,\"allow_dm\":1,\"allow_download\":0,\"area_limit\":0},\"share_copy\":\"《派對咖孔明（僅限港澳台地區）》第2话 孔明 施展計謀\",\"share_url\":\"https:\\u002F\\u002Fwww.bilibili.com\\u002Fbangumi\\u002Fplay\\u002Fep475899\",\"short_link\":\"https:\\u002F\\u002Fb23.tv\\u002Fep475899\",\"status\":13,\"subtitle\":\"已观看18万次\",\"title\":\"2\",\"vid\":\"\",\"loaded\":true,\"badgeType\":0,\"badgeColor\":\"#FB7299\",\"epStatus\":13,\"titleFormat\":\"第2话\",\"longTitle\":\"孔明 施展計謀\",\"sectionType\":0,\"releaseDate\":\"\",\"skip\":{},\"stat\":{},\"orderSectionIds\":[],\"hasNext\":false,\"hasSkip\":false,\"i\":1}};(function(){vars;(s=document.currentScript||document.scripts[document.scripts.length-1]).parentNode.removeChild(s);}());</script><scripttype=\"text/javascript\">";
+
+        assert_eq!(lookup::find_id(content),Some((String::from("BV1zT4y1v7kC"),569612278)));
+    }
+}
+
