@@ -8,6 +8,8 @@ use std::error::Error;
 use bccdc::cc;
 use bccdc::lookup;
 
+use bccdc::bili;
+
 struct Config{
     work_dir: PathBuf,
 }
@@ -16,19 +18,28 @@ struct Config{
 fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn Error>> {
 
     let mut work_dir = std::env::current_dir().expect("fail to get pwd.");
+    let mut proxy: Option<String> = None;
     args.next();
     let mut arg = args.next();
     let mut param: Vec<String> = Vec::new();
     while let Some(value) = arg{
-        if value == "-d"{
-            work_dir= Path::new(&args.next().ok_or("-d required param")?).to_path_buf();
-        }else{
-            param.push(value);
-            args.into_iter().for_each(|x| param.push(x));
+        match value.as_str() {
+            "-d" => {
+                work_dir= Path::new(&args.next().ok_or("-d requires parameter")?).to_path_buf();
+            },
+            "--proxy" =>{
+                proxy = Some(args.next().ok_or("--proxy requires parameter")?)
+            },
+            other => {
+                param.push(other.to_string());
+                args.into_iter().for_each(|x| param.push(x));
+            }
         }
+        
         arg=args.next();
     }
-
+    
+    bili::init_client(proxy);
 
     Ok((Config{work_dir},param))
 }
@@ -41,7 +52,7 @@ fn lookup_param(config: &Config, param: &mut Vec<String>)->Result<Vec<cc::CcSubt
         if target.starts_with("av") || target.starts_with("bv"){
             return Err("not supported yet.".into());
         }else if target.starts_with("ep"){
-            return Err("not supported yet.".into());
+            return lookup::lookup_ep_id(&target);
         }
     }
 
@@ -85,7 +96,13 @@ fn lookup_param(config: &Config, param: &mut Vec<String>)->Result<Vec<cc::CcSubt
 fn main() {
     
     let mut args = std::env::args();
-    let (config,mut param) = parse_args(&mut args).expect("");
+    let (config,mut param) = match parse_args(&mut args){
+        Ok((config,mut param))=> (config,param),
+        Err(e) => {
+            eprintln!("{}",e);
+            process::exit(1);
+        }
+    };
 
     if param.is_empty(){
         return ;
@@ -97,7 +114,7 @@ fn main() {
     let  subtitles= match lookup_param(&config,&mut param){
         Ok(v)=>v,
         Err(e)=> {
-            println!("{}",e);
+            eprintln!("{}",e);
             process::exit(1);
         }
     };

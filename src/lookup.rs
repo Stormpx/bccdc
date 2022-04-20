@@ -85,13 +85,26 @@ fn find_id(ep_html: &str)-> Option<(String,u64)>{
 pub fn lookup_ep_id(id: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
     let content=bili::get_ep_html(id)?;
 
-    let (bvid,cid) = find_id(&content).ok_or::<Box<dyn Error>>("unable find bvid and cid".into())?;
+    //println!("{}",content);
+    let (bvid,cid) = find_id(&content).ok_or::<Box<dyn Error>>(format!("unable find bvid and cid by {}",id).into())?;
 
     let list= bili::get_subtitle_list(&bvid,cid)?;
 
-    
-    Err("".into())
-    
+    let mut result = Vec::new();
+    for info in list {
+        if let Some(url) = info.url(){
+            match lookup_cc_api(&url){
+                Ok(mut cc)=> {
+                    cc.name = info.lan;
+                    result.push(cc)
+                },
+                Err(e)=> {
+                    eprintln!("fail to download {} cause: {}",info.lan_doc,e);
+                }
+            }
+        }
+    }
+    Ok(result)
 }
 //pub fn lookup_video_id(vid: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>> {
 //   

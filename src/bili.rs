@@ -3,16 +3,44 @@ use reqwest::header;
 use std::error::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value};
-use lazy_static::lazy_static;
+//use lazy_static::lazy_static;
 use std::collections::HashMap;
+use once_cell::sync::OnceCell; 
+use once_cell::sync::Lazy;
 
-lazy_static!{
-    static ref HTTP_CLIENT: reqwest::blocking::Client= reqwest::blocking::Client::builder()
-        .gzip(true)
-        .build().unwrap();
-    static ref EP_URL: Url = Url::parse("https://www.bilibili.com/bangumi/play").unwrap();
-    static ref PLAYER_URL:Url = Url::parse("https://api.bilibili.com/x/player/v2").unwrap();
+static EP_URL: Lazy<Url> = Lazy::new(||  Url::parse("https://www.bilibili.com/bangumi/play/").unwrap());
+static PLAYER_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://api.bilibili.com/x/player/v2").unwrap());
+
+static HTTP_CLIENT: OnceCell<reqwest::blocking::Client> = OnceCell::new();
+
+pub fn init_client(proxy: Option<String>) -> Result<(),Box<dyn Error>>{
+    let mut  builder = reqwest::blocking::Client::builder()
+        .gzip(true);
+        
+    if let Some(proxy)= proxy{
+        builder = builder.proxy(reqwest::Proxy::all(proxy)?);
+    }
+
+    let client = builder.build()?;
+    HTTP_CLIENT.set(client).unwrap();
+    Ok(())
 }
+
+fn client()-> &'static reqwest::blocking::Client{
+    HTTP_CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .gzip(true)
+            .build().unwrap()
+    })
+}
+
+//lazy_static!{
+//    static ref HTTP_CLIENT: reqwest::blocking::Client= reqwest::blocking::Client::builder()
+//        .proxy(reqwest::Proxy::all("http://172.26.160.1:8889/").unwrap())
+//        .gzip(true)
+//        .build().unwrap();
+//}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BilibiliResult{
@@ -33,32 +61,37 @@ impl BilibiliResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubtitleInfo{
-   id : u64,
-   lan: String,
-   lan_doc: String,
-   subtitle_url: String,
-   r#type: u8,
+   pub id : u64,
+   pub lan: String,
+   pub lan_doc: String,
+   pub subtitle_url: String,
+   pub r#type: u8,
 }
 
 impl SubtitleInfo {
-    pub fn url(&self)-> String{
+    pub fn url(&self)-> Option<Url>{
        if self.subtitle_url.starts_with("http"){
-            return self.subtitle_url.to_string();
+            return Url::parse(&self.subtitle_url).ok();
        }
-       format!("https:{}",self.subtitle_url)
+       Url::parse(&format!("https:{}",self.subtitle_url)).ok()
     }
 }
 
 pub fn simple_http_get(url: &Url,query: &HashMap<&str,String> )-> Result<String,Box<dyn Error>>{
 
-    Ok(HTTP_CLIENT.get(url.as_str())
+    let resp = client().get(url.as_str())
         .header(header::ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
         .header(header::ACCEPT_LANGUAGE,"en-US,en;q=0.5")
         .header(header::ACCEPT_ENCODING, "gzip")
-      .header(header::USER_AGENT,"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0")
-      .query(query)
-      .send()?
-      .text()?)
+        .header(header::USER_AGENT,"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0")
+        .query(query)
+        .send()?;
+
+     if resp.status().is_success() {
+        return Ok(resp.text()?)
+     } else{
+        return Err(format!("request {} return {}",resp.url(),resp.status()).into());
+     } 
 
 }
 
