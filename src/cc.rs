@@ -1,3 +1,7 @@
+use std::fs::File;
+use std::io::Error;
+use std::io::Write;
+
 pub struct CcSubtitle{
     pub name: String,
     pub lines: Vec<Line>,
@@ -27,4 +31,49 @@ impl Line{
 
 }
 
+pub fn srt()->impl Formatter{
+     Srt{}
+}
+
+pub trait Formatter{
+    
+    
+
+    fn ext(&self)->&str;
+
+    fn format(&self , subtitle: CcSubtitle)->Vec<String>;
+
+    fn write(&self, file: &mut File, subtitle: CcSubtitle)-> Result<(),Error>{
+        let lines = self.format(subtitle);
+        for line in lines.iter(){
+            file.write(line.as_bytes())?;
+        }
+        Ok(())
+    }
+    
+}
+
+pub struct Srt {
+}
+
+impl Formatter for Srt{
+
+    fn ext(&self)->&str{
+        "srt"
+    }
+
+    fn format(&self , subtitle: CcSubtitle)->Vec<String>{
+        let mut result = Vec::new();
+        for (index,line) in subtitle.lines.iter().enumerate(){
+
+            let str=format!("{}\n\
+                {} --> {}\n\
+                {}\n\n",index+1,line.format_start(),line.format_end(),line.content
+                );
+
+            result.push(str);
+        }
+        result
+    }
+}
 

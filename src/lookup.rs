@@ -9,6 +9,22 @@ use std::collections::HashMap;
 use crate::bili;
 
 
+pub enum Page{
+    All,
+    Single(u32),
+    Range(u32,u32),
+}
+
+impl Page {
+    fn test(&self,p: &u32)->bool{
+        match self{
+            Page::All => true,
+            Page::Single(i) => i==p,
+            Page::Range(s,e) => s<=p&&e>=p,
+        }
+        
+    }
+}
 
 pub fn json_to_subtitle(name: &str,content: &str)-> Result<CcSubtitle,Box<dyn Error>> {
     
@@ -106,9 +122,10 @@ pub fn lookup_ep_id(id: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
     }
     Ok(result)
 }
-//pub fn lookup_video_id(vid: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>> {
-//   
-//}
+
+pub fn lookup_video_id(id: &str,includes: Vec<Page>)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
+    Ok(vec![])    
+}
 
 #[cfg(test)]
 mod tests{
