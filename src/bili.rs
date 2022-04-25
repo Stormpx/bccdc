@@ -3,13 +3,12 @@ use reqwest::header;
 use std::error::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value};
-//use lazy_static::lazy_static;
-use std::collections::HashMap;
 use once_cell::sync::OnceCell; 
 use once_cell::sync::Lazy;
 
 static EP_URL: Lazy<Url> = Lazy::new(||  Url::parse("https://www.bilibili.com/bangumi/play/").unwrap());
 static PLAYER_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://api.bilibili.com/x/player/v2").unwrap());
+static PAGE_LIST_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://api.bilibili.com/x/player/pagelist").unwrap());
 
 static HTTP_CLIENT: OnceCell<reqwest::blocking::Client> = OnceCell::new();
 
@@ -33,14 +32,6 @@ fn client()-> &'static reqwest::blocking::Client{
             .build().unwrap()
     })
 }
-
-//lazy_static!{
-//    static ref HTTP_CLIENT: reqwest::blocking::Client= reqwest::blocking::Client::builder()
-//        .proxy(reqwest::Proxy::all("http://172.26.160.1:8889/").unwrap())
-//        .gzip(true)
-//        .build().unwrap();
-//}
-
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BilibiliResult{
@@ -77,7 +68,15 @@ impl SubtitleInfo {
     }
 }
 
-pub fn simple_http_get(url: &Url,query: &HashMap<&str,String> )-> Result<String,Box<dyn Error>>{
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PageInfo{
+   pub cid: u64,
+   pub page: u32,
+   pub part: String,
+   pub duration: u64,
+}
+
+pub fn simple_http_get(url: &Url,query: &Vec<(&str,&str)> )-> Result<String,Box<dyn Error>>{
 
     let resp = client().get(url.as_str())
         .header(header::ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
@@ -97,14 +96,11 @@ pub fn simple_http_get(url: &Url,query: &HashMap<&str,String> )-> Result<String,
 
 pub fn get_ep_html(ep_id: &str)-> Result<String,Box<dyn Error>>{
     let url= EP_URL.join(ep_id)?;
-    simple_http_get(&url,&HashMap::new())
+    simple_http_get(&url,&vec![])
 }
 
 pub fn get_subtitle_list(bvid:&str,cid:u64)-> Result<Vec<SubtitleInfo>,Box<dyn Error>>{
-    let mut query= HashMap::new();
-    query.insert("bvid",bvid.to_string());
-    query.insert("cid",cid.to_string());
-    let content= simple_http_get(&PLAYER_URL,&query)?;
+    let content= simple_http_get(&PLAYER_URL,&vec![("bvid",bvid),("cid",&cid.to_string())])?;
     let result: BilibiliResult = serde_json::from_str(&content)?;
 
     let data = result.data()?; 
@@ -120,6 +116,17 @@ pub fn get_subtitle_list(bvid:&str,cid:u64)-> Result<Vec<SubtitleInfo>,Box<dyn E
         .map(|x| x.unwrap())
         .collect())
 
+}
+
+pub fn get_page_list(bvid: &str)-> Result<Vec<PageInfo>,Box<dyn Error>> {
+    let content= simple_http_get(&PAGE_LIST_URL,&vec![("bvid",bvid),("jsonp","jsonp")])?;
+    
+    let result: BilibiliResult = serde_json::from_str(&content)?;
+
+    let data = result.data()?; 
+    let page_list = Vec::<PageInfo>::deserialize(data)?; 
+
+    Ok(page_list) 
 }
 
 #[cfg(test)]
@@ -142,6 +149,20 @@ mod tests{
         println!("{:?}",infos);
 
 
+    }
+    #[test]
+    fn get_page_list(){
+            
+        let bvid = "BV1zT4y1v7kC";
+
+        let pages = bili::get_page_list(bvid).unwrap();
+        
+        let page= &pages[0];
+
+        assert_eq!(page.cid,569612278);
+        assert_eq!(page.page,1);
+        assert_eq!(page.part, "PP02_Haishin_R.encoded");
+        assert_eq!(page.duration,1421);
     }
     
 }

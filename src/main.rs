@@ -1,7 +1,6 @@
 use std::process;
 use std::fs;
 use url::{Url};
-use std::io::prelude::*;
 use std::path::{Path,PathBuf};
 use std::error::Error;
 
@@ -58,9 +57,14 @@ fn parse_range(string: &str)-> Result<lookup::Page,Box<dyn Error>>{
         return Ok(lookup::Page::Single(p as u32));
     }
     if let Some((s,e)) = string.split_once("-"){
-        return Ok(lookup::Page::Range(s.parse::<u32>()?,e.parse::<u32>()?));
+        if let (Ok(mut s),Ok(mut e)) = (s.parse::<u32>(), e.parse::<u32>()) {
+            if s>e{
+                (s,e)=(e,s);
+            }
+            return Ok(lookup::Page::Range(s,e));
+        }
     }
-    return Err("expected uint or uint-uint".into());
+    return Err(format!("expected <p> or <p-p>. but found {}",string).into());
     
 }
 
@@ -70,19 +74,35 @@ fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Context
     { 
         let target= arg0.to_lowercase();
         if target.starts_with("av") || target.starts_with("bv"){
-            let ranges = param.iter()
+            let mut ranges = param.iter()
                 .skip(1)
                 .map(|x| parse_range(x))
                 .collect::<Result<Vec<lookup::Page>,Box<dyn Error>>>()?;
+            if ranges.is_empty(){
+                ranges= vec![lookup::Page::All];
+            }
 
-            let subtitles = lookup::lookup_video_id(arg0,ranges)?;
+            let subtitles : Vec<cc::CcSubtitle> = lookup::lookup_video_id(arg0,ranges)?
+                .into_iter()
+                .flat_map(|vp| {
+                    let mut subs = vp.subtitles;
+                    for sub in subs.iter_mut(){
+                        sub.name = format!("{}-{}",vp.p,sub.name);
+                    }
+                    subs
+                })
+                .collect();
 
-            return Err("not supported yet.".into());
-        }else if target.starts_with("ep"){
-            let subtitels = lookup::lookup_ep_id(&target)?;
             return Ok(Context {
                     dir: Some(arg0),
-                    subtitles: subtitels 
+                    subtitles: subtitles
+                });
+ 
+        }else if target.starts_with("ep"){
+            let subtitles = lookup::lookup_ep_id(&target)?;
+            return Ok(Context {
+                    dir: Some(arg0),
+                    subtitles:subtitles 
                 });
         }
     }
@@ -128,6 +148,10 @@ fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Context
 
 }
 
+fn new_formatter()-> Box<dyn Formatter>{
+    Box::new(cc::Srt::new())
+}
+
 fn main() {
     
     let mut args = std::env::args();
@@ -139,7 +163,6 @@ fn main() {
         }
     };
 
-    let formatter = cc::srt();
 
     if param.is_empty(){
         return ;
@@ -173,10 +196,13 @@ fn main() {
      }
 
     for subtitle in subtitles{
+        let mut formatter = new_formatter();
+
         work_dir.push(subtitle.name.clone());
         work_dir.set_extension(formatter.ext());
+
         let path = work_dir.as_path();
-        write_subtitle_to_file(&path,subtitle,&formatter)
+        write_subtitle_to_file(&path,subtitle,formatter.as_mut())
           .expect("fail to write subtitle file");
 
         println!("{}",path.display());
@@ -190,7 +216,7 @@ fn main() {
     
 }
 
-fn write_subtitle_to_file(file_path: &Path,subtitle: cc::CcSubtitle, formatter:&dyn cc::Formatter)-> std::io::Result<()>{
+fn write_subtitle_to_file(file_path: &Path,subtitle: cc::CcSubtitle, formatter: &mut dyn cc::Formatter)-> std::io::Result<()>{
   let mut file = fs::File::create(file_path)?;
   formatter.write(&mut file,subtitle)?;
   Ok(())

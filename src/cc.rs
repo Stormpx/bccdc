@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::io::Error;
 use std::io::Write;
 
@@ -31,49 +30,61 @@ impl Line{
 
 }
 
-pub fn srt()->impl Formatter{
-     Srt{}
-}
 
 pub trait Formatter{
-    
     
 
     fn ext(&self)->&str;
 
-    fn format(&self , subtitle: CcSubtitle)->Vec<String>;
+    fn format(&mut self , subtitle: &CcSubtitle)->Vec<String>;
 
-    fn write(&self, file: &mut File, subtitle: CcSubtitle)-> Result<(),Error>{
-        let lines = self.format(subtitle);
-        for line in lines.iter(){
-            file.write(line.as_bytes())?;
+    fn format_line(&mut self, line: &Line)-> String;
+
+    fn write(&mut self, writer: &mut dyn  Write, subtitle: CcSubtitle)-> Result<(),Error>{
+        for line in subtitle.lines{
+            writer.write(self.format_line(&line).as_bytes())?;
         }
         Ok(())
     }
     
 }
-
 pub struct Srt {
+    counter: u32,
+}
+impl Srt{
+    
+    pub fn new()->Srt{
+        Srt{counter: 1}
+    }
 }
 
 impl Formatter for Srt{
+
 
     fn ext(&self)->&str{
         "srt"
     }
 
-    fn format(&self , subtitle: CcSubtitle)->Vec<String>{
-        let mut result = Vec::new();
-        for (index,line) in subtitle.lines.iter().enumerate(){
-
-            let str=format!("{}\n\
+    fn format_line(&mut self, line: &Line)-> String{
+        let str=format!("{}\n\
                 {} --> {}\n\
-                {}\n\n",index+1,line.format_start(),line.format_end(),line.content
+                {}\n\n",self.counter,line.format_start(),line.format_end(),line.content
                 );
 
-            result.push(str);
+        self.counter+=1;
+        str
+    }
+
+    fn format(&mut self , subtitle: &CcSubtitle)->Vec<String>{
+        let mut result = Vec::new();
+        for line in subtitle.lines.iter(){
+            result.push(self.format_line(line));
         }
         result
     }
+
+}
+
+pub struct Vtt{
 }
 

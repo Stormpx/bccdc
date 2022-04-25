@@ -4,7 +4,6 @@ use std::path::Path;
 use std::error::Error;
 use serde_json::{Value,Deserializer};
 use crate::cc::{CcSubtitle,Line};
-use std::collections::HashMap;
 
 use crate::bili;
 
@@ -25,6 +24,13 @@ impl Page {
         
     }
 }
+
+pub struct VideoPage{
+    pub p: u32,
+    pub subtitles: Vec<CcSubtitle>,
+}
+
+
 
 pub fn json_to_subtitle(name: &str,content: &str)-> Result<CcSubtitle,Box<dyn Error>> {
     
@@ -65,7 +71,7 @@ pub fn lookup_cc_api(url: &Url) -> Result<CcSubtitle,Box<dyn Error>>{
         file_name= &file_name[0..p];
     }
 
-    let content = bili::simple_http_get(url,&HashMap::new())?;
+    let content = bili::simple_http_get(url,&vec![])?;
 
     json_to_subtitle(file_name,&content)
 
@@ -98,12 +104,7 @@ fn find_id(ep_html: &str)-> Option<(String,u64)>{
 
 }
 
-pub fn lookup_ep_id(id: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
-    let content=bili::get_ep_html(id)?;
-
-    //println!("{}",content);
-    let (bvid,cid) = find_id(&content).ok_or::<Box<dyn Error>>(format!("unable find bvid and cid by {}",id).into())?;
-
+fn get_subtitles(bvid: &str,cid: u64,page: u32)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
     let list= bili::get_subtitle_list(&bvid,cid)?;
 
     let mut result = Vec::new();
@@ -115,16 +116,50 @@ pub fn lookup_ep_id(id: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
                     result.push(cc)
                 },
                 Err(e)=> {
-                    eprintln!("fail to download {} cause: {}",info.lan_doc,e);
+                    eprintln!("fail to download {}-p{} subtitle: {} cause: {}",bvid,page,info.lan_doc,e);
                 }
             }
         }
     }
     Ok(result)
+
 }
 
-pub fn lookup_video_id(id: &str,includes: Vec<Page>)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
-    Ok(vec![])    
+pub fn lookup_ep_id(id: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
+    let content=bili::get_ep_html(id)?;
+
+    //println!("{}",content);
+    let (bvid,cid) = find_id(&content).ok_or::<Box<dyn Error>>(format!("unable find bvid and cid by {}",id).into())?;
+
+    get_subtitles(&bvid,cid,1)
+    
+}
+
+pub fn lookup_video_id(id: &str,interested: Vec<Page>)-> Result<Vec<VideoPage>,Box<dyn Error>>{
+    if id.starts_with("av"){
+        
+    }
+
+    let page_list = bili::get_page_list(id)?;
+
+    let vsubs : Vec<VideoPage>= page_list.iter()
+        .filter(|page| interested.iter().any(|range| range.test(&page.page)))
+        .map(|page| { 
+            
+            let r = get_subtitles(id,page.cid,page.page)
+                .map(|subs| VideoPage{p: page.page,subtitles: subs});
+
+            if let Err(ref e) = r{
+                eprintln!("fail to get subtitle list. cause: {}",e);
+            }
+            r
+
+        })
+        .filter(|r| r.is_ok())
+        .map(|r| r.unwrap())
+        .collect();
+
+    Ok(vsubs)    
 }
 
 #[cfg(test)]
