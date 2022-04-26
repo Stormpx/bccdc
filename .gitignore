@@ -1,5 +1,7 @@
 /target
 /downloads
+/tmp
 *.srt
 *.json
 *.swp
+

@@ -2,7 +2,6 @@ use std::{process,io,fs};
 use url::{Url};
 use std::path::{Path,PathBuf};
 use std::error::Error;
-
 use bccdc::cc;
 use bccdc::cc::Formatter;
 use bccdc::lookup;
@@ -170,7 +169,7 @@ fn new_formatter(config: &Config)-> Box<dyn Formatter>{
 fn main() {
     
     let mut args = std::env::args();
-    let (config,mut param) = match parse_args(&mut args){
+    let (mut config,mut param) = match parse_args(&mut args){
         Ok((config,param))=> (config,param),
         Err(e) => {
             eprintln!("{}",e);
@@ -194,6 +193,23 @@ fn main() {
             if n==0{
                 break;
             }
+            let r = shlex::split(&input);
+            if let Some(mut param) = r{
+                if param.is_empty(){
+                    continue;
+                }
+                let context = match lookup_param(&config,&mut param){
+                    Ok(v)=>v,
+                    Err(e)=> {
+                        eprintln!("{}",e);
+                        process::exit(1);
+                    }
+                };
+                write_context(&mut config,formatter.as_mut(),context);
+            }else if let None = r {
+                eprintln!("fail to parse input.");
+            }
+
         }
     }else{
         let context = match lookup_param(&config,&mut param){
@@ -203,14 +219,14 @@ fn main() {
                 process::exit(1);
             }
         };
-        write_context(config,formatter.as_mut(),context);
+        write_context(&mut config,formatter.as_mut(),context);
     }
     
     
 }
 
-fn write_context(config: Config, formatter: &mut dyn Formatter, context: Context){
-    let mut work_dir= config.work_dir;
+fn write_context(config: &mut Config, formatter: &mut dyn Formatter, context: Context){
+    let work_dir= &mut config.work_dir;
 
     let subtitles = context.subtitles;
     if subtitles.is_empty(){
