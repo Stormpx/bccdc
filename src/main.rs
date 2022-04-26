@@ -72,19 +72,20 @@ fn parse_range(string: &str)-> Result<lookup::Page,Box<dyn Error>>{
 }
 
 fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Context<'a>,Box<dyn Error>>{
-    let arg0= &param[0];
+    let arg0= &param[0].trim();
     
     { 
         let target= arg0.to_lowercase();
         if target.starts_with("av") || target.starts_with("bv"){
+
             let mut ranges = param.iter()
                 .skip(1)
+                .filter(|x|!x.is_empty())
                 .map(|x| parse_range(x))
                 .collect::<Result<Vec<lookup::Page>,Box<dyn Error>>>()?;
             if ranges.is_empty(){
                 ranges= vec![lookup::Page::All];
             }
-
             let subtitles : Vec<cc::CcSubtitle> = lookup::lookup_video_id(arg0,ranges)?
                 .into_iter()
                 .flat_map(|vp| {
@@ -95,7 +96,6 @@ fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Contex
                     subs
                 })
                 .collect();
-
             return Ok(Context {
                     dir: Some(arg0),
                     subtitles: subtitles
@@ -113,6 +113,8 @@ fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Contex
     let mut result= Vec::new();
     if let Ok(_url) = Url::parse(arg0){
         param.iter()
+            .map(|x|x.trim())
+            .filter(|x|!x.is_empty())
             .map(|x| {
                 match Url::parse(x){
                     Ok(url) =>Some( url ), 
@@ -134,6 +136,8 @@ fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Contex
     }else{
         //fallback to 'path'
         param.iter()
+            .map(|x|x.trim())
+            .filter(|x|!x.is_empty())
             .map(|x|Path::new(x))
             .for_each(|path| {
                 match lookup::lookup_file(&path){

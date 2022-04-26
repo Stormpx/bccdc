@@ -35,7 +35,7 @@ fn client()-> &'static reqwest::blocking::Client{
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BilibiliResult{
-   code: u64,
+   code: i64,
    message: String,
    ttl: u64,
    data: Value,
