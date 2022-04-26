@@ -1,5 +1,4 @@
-use std::process;
-use std::fs;
+use std::{process,io,fs};
 use url::{Url};
 use std::path::{Path,PathBuf};
 use std::error::Error;
@@ -12,6 +11,7 @@ use bccdc::bili;
 
 struct Config{
     work_dir: PathBuf,
+    format: String,
 }
 
 struct Context<'a>{
@@ -22,6 +22,7 @@ struct Context<'a>{
 fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn Error>> {
 
     let mut work_dir = std::env::current_dir().expect("fail to get pwd.");
+    let mut format= String::from("srt");
     let mut proxy: Option<String> = None;
     args.next();
     let mut arg = args.next();
@@ -34,6 +35,9 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
             "--proxy" =>{
                 proxy = Some(args.next().ok_or("--proxy requires parameter")?)
             },
+            "-c" =>{
+               format = args.next().ok_or("-c requires parameter")?;
+            },
             other => {
                 param.push(other.to_string());
                 args.into_iter().for_each(|x| param.push(x));
@@ -45,7 +49,7 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
     
     bili::init_client(proxy)?;
 
-    Ok((Config{work_dir},param))
+    Ok((Config{work_dir,format},param))
 }
 
 fn parse_range(string: &str)-> Result<lookup::Page,Box<dyn Error>>{
@@ -68,7 +72,7 @@ fn parse_range(string: &str)-> Result<lookup::Page,Box<dyn Error>>{
     
 }
 
-fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Context<'a>,Box<dyn Error>>{
+fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Context<'a>,Box<dyn Error>>{
     let arg0= &param[0];
     
     { 
@@ -148,8 +152,19 @@ fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Context
 
 }
 
-fn new_formatter()-> Box<dyn Formatter>{
-    Box::new(cc::Srt::new())
+fn new_formatter(config: &Config)-> Box<dyn Formatter>{
+    let format = config.format.to_lowercase() ;
+    match format.as_str() {
+        "srt"=> Box::new(cc::Srt::new()), 
+        "sub"=> Box::new(cc::Sub::new()),
+        "ass"=> Box::new(cc::Ass::new()),
+        other => {
+            eprintln!("unsupported subtitle format {}",other);
+            process::exit(1);
+        }
+
+    }
+
 }
 
 fn main() {
@@ -164,18 +179,37 @@ fn main() {
     };
 
 
+    let mut formatter = new_formatter(&config);
+
     if param.is_empty(){
-        return ;
-    }
-
-    let context = match lookup_param(&config,&mut param){
-        Ok(v)=>v,
-        Err(e)=> {
-            eprintln!("{}",e);
-            process::exit(1);
+        loop{
+            let mut input = String::new();
+            let n = match io::stdin().read_line(&mut input){
+                Ok(n)=>n,
+                Err(e)=>{
+                    eprintln!("{}",e);
+                    process::exit(1);
+                }
+            };
+            if n==0{
+                break;
+            }
         }
-    };
+    }else{
+        let context = match lookup_param(&config,&mut param){
+            Ok(v)=>v,
+            Err(e)=> {
+                eprintln!("{}",e);
+                process::exit(1);
+            }
+        };
+        write_context(config,formatter.as_mut(),context);
+    }
+    
+    
+}
 
+fn write_context(config: Config, formatter: &mut dyn Formatter, context: Context){
     let mut work_dir= config.work_dir;
 
     let subtitles = context.subtitles;
@@ -196,13 +230,12 @@ fn main() {
      }
 
     for subtitle in subtitles{
-        let mut formatter = new_formatter();
 
         work_dir.push(subtitle.name.clone());
         work_dir.set_extension(formatter.ext());
 
         let path = work_dir.as_path();
-        write_subtitle_to_file(&path,subtitle,formatter.as_mut())
+        write_subtitle_to_file(&path,subtitle,formatter)
           .expect("fail to write subtitle file");
 
         println!("{}",path.display());
@@ -213,7 +246,6 @@ fn main() {
         work_dir.pop();
     }
      
-    
 }
 
 fn write_subtitle_to_file(file_path: &Path,subtitle: cc::CcSubtitle, formatter: &mut dyn cc::Formatter)-> std::io::Result<()>{
