@@ -38,6 +38,7 @@ struct BilibiliResult{
    code: i64,
    message: String,
    ttl: u64,
+   #[serde(default)]
    data: Value,
 }
 
