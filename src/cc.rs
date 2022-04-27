@@ -4,6 +4,8 @@ use std::io::Write;
 
 pub struct CcSubtitle{
     pub name: String,
+    pub lan: Option<String>,
+    pub lan_doc: Option<String>,
     pub lines: Vec<Line>,
 }
 

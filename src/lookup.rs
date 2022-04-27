@@ -7,6 +7,7 @@ use crate::cc::{CcSubtitle,Line};
 
 use crate::bili;
 
+static ERR_MSG: &str = "invalid bcc file";
 
 pub enum Page{
     All,
@@ -33,23 +34,27 @@ pub struct VideoPage{
 
 
 pub fn json_to_subtitle(name: &str,content: &str)-> Result<CcSubtitle,Box<dyn Error>> {
-    
-
-    let v: Value = serde_json::from_str(content)?;
+    let r = serde_json::from_str(content);
+    if let Err(_) = r{
+        return Err(ERR_MSG.into());
+    }
+    let v: Value = r?;
     
     let body: &Value = &v["body"];
     
-    let objs: &Vec<Value>=body.as_array().ok_or("body field isn't array")?;
+    let objs: &Vec<Value>=body.as_array().ok_or(ERR_MSG)?;
 
     let lines: Result<Vec<Line>,Box<dyn Error>>=objs.iter().map(|obj| {
-        let content= obj["content"].as_str().ok_or::<Box<dyn Error>>("content".into())?.to_string();
-        let start = obj["from"].as_f64().ok_or::<Box<dyn Error>>("from".into())?;
-        let end = obj["to"].as_f64().ok_or::<Box<dyn Error>>("to".into())?;
+        let content= obj["content"].as_str().ok_or::<Box<dyn Error>>(ERR_MSG.into())?.to_string();
+        let start = obj["from"].as_f64().ok_or::<Box<dyn Error>>(ERR_MSG.into())?;
+        let end = obj["to"].as_f64().ok_or::<Box<dyn Error>>(ERR_MSG.into())?;
         Ok(Line{content,start,end})
     }).collect();
     
     Ok(CcSubtitle{
         name: name.to_string(),
+        lan: None,
+        lan_doc: None,
         lines: lines?,
     })
 
@@ -112,7 +117,8 @@ fn get_subtitles(bvid: &str,cid: u64,page: u32)-> Result<Vec<CcSubtitle>,Box<dyn
         if let Some(url) = info.url(){
             match lookup_cc_api(&url){
                 Ok(mut cc)=> {
-                    cc.name = info.lan;
+                    cc.lan = Some(info.lan);
+                    cc.lan_doc = Some(info.lan_doc);
                     result.push(cc)
                 },
                 Err(e)=> {

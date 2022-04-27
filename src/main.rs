@@ -11,6 +11,19 @@ use bccdc::bili;
 struct Config{
     work_dir: PathBuf,
     format: String,
+    doc: bool,
+}
+
+impl Config{
+    
+    fn determine_name(&self , sub: &mut cc::CcSubtitle){
+        let o_lan = if !self.doc { &sub.lan}else{ &sub.lan_doc};
+        if let Some(lan) = o_lan {
+            let name = &mut sub.name;
+            name.clear();
+            name.push_str(lan);
+        }
+    }
 }
 
 struct Context<'a>{
@@ -18,16 +31,35 @@ struct Context<'a>{
     subtitles: Vec<cc::CcSubtitle>,
 }
 
-fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn Error>> {
+fn print_helps(){
 
+    println!("Usage: bccdc [option..] <bvid/epid/bcc_url/bcc_file>
+
+Examples:
+    bccdc -d downloads/ BV1ns411D7NJ 1 3-4 # download BV1ns411D7NJ p1 p3 p4
+    bccdc -d downloads/ ep475901
+    bccdc -d downloads/ subtitle.json
+
+Options:
+    -d <directory> specify the output directory
+    -c <srt/ass> specify the subtitle format to convert. default: srt 
+    --doc use language_name as filename instead of language_tag. (take effect while downloading with bvid/epid)
+    --proxy <http://host:port> use proxy");
+
+    process::exit(0);
+}
+
+fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn Error>> {
     let mut work_dir = std::env::current_dir().expect("fail to get pwd.");
     let mut format= String::from("srt");
+    let mut doc= false;
     let mut proxy: Option<String> = None;
     args.next();
     let mut arg = args.next();
     let mut param: Vec<String> = Vec::new();
     while let Some(value) = arg{
         match value.as_str() {
+            "-h"|"--help" => print_helps(),
             "-d" => {
                 work_dir= Path::new(&args.next().ok_or("-d requires parameter")?).to_path_buf();
             },
@@ -37,8 +69,11 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
             "-c" =>{
                format = args.next().ok_or("-c requires parameter")?;
             },
-            other => {
-                param.push(other.to_string());
+            "--doc" =>{
+                doc = true;
+            },
+            _ => {
+                param.push(value);
                 args.into_iter().for_each(|x| param.push(x));
             }
         }
@@ -48,7 +83,7 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
     
     bili::init_client(proxy)?;
 
-    Ok((Config{work_dir,format},param))
+    Ok((Config{work_dir,format,doc},param))
 }
 
 fn parse_range(string: &str)-> Result<lookup::Page,Box<dyn Error>>{
@@ -71,7 +106,7 @@ fn parse_range(string: &str)-> Result<lookup::Page,Box<dyn Error>>{
     
 }
 
-fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Context<'a>,Box<dyn Error>>{
+fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Context<'a>,Box<dyn Error>>{
     let arg0= &param[0].trim();
     
     { 
@@ -91,6 +126,7 @@ fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Contex
                 .flat_map(|vp| {
                     let mut subs = vp.subtitles;
                     for sub in subs.iter_mut(){
+                        config.determine_name(sub);    
                         sub.name = format!("{}-{}",vp.p,sub.name);
                     }
                     subs
@@ -102,7 +138,10 @@ fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Contex
                 });
  
         }else if target.starts_with("ep"){
-            let subtitles = lookup::lookup_ep_id(&target)?;
+            let mut subtitles = lookup::lookup_ep_id(&target)?;
+            for sub in subtitles.iter_mut(){
+                config.determine_name(sub);    
+            }
             return Ok(Context {
                     dir: Some(arg0),
                     subtitles:subtitles 
@@ -129,7 +168,7 @@ fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Contex
             .for_each(|url|{
                 match lookup::lookup_cc_api(&url){
                     Ok(subtitle) => result.push(subtitle),
-                    Err(e) => eprintln!("fail to lookup {}. cause: {}",url,e),
+                    Err(e) => eprintln!("fail to lookup {}: {}",url,e),
                 }
             });
         
@@ -142,7 +181,7 @@ fn lookup_param<'a>(_config: &Config, param: &'a mut Vec<String>)->Result<Contex
             .for_each(|path| {
                 match lookup::lookup_file(&path){
                     Ok(subtitle) => result.push(subtitle),
-                    Err(e) => eprintln!("fail to lookup file {}. cause: {}",path.display(),e),
+                    Err(e) => eprintln!("{}: {}",path.display(),e),
                 }
             });
 
