@@ -1,5 +1,6 @@
 use std::io::Error;
 use std::io::Write;
+use regex::{Captures,Regex};
 
 
 pub struct CcSubtitle{
@@ -23,8 +24,9 @@ pub trait Formatter{
     fn write(&mut self, writer: &mut dyn  Write, subtitle: CcSubtitle)-> Result<(),Error>;
     
 }
-pub struct Srt {
-}
+
+pub struct Srt; 
+
 impl Srt{
     
     pub fn new()->Self{
@@ -52,7 +54,7 @@ impl Formatter for Srt{
         for (index, line ) in subtitle.lines.iter().enumerate(){
             let str=format!("{}\n\
                 {} --> {}\n\
-                {}\n\n",index+1,Srt::format_time(line.start),Srt::format_time(line.end),line.content
+                {}\n\n",index+1,Self::format_time(line.start),Self::format_time(line.end),line.content
                 );
 
             writer.write(str.as_bytes())?;
@@ -93,7 +95,7 @@ impl Formatter for Sub{
         for  line  in subtitle.lines.iter(){
             let str=format!(
                 "{{{}}}{{{}}}{}\n\n",
-                Sub::to_frame(line.start),Sub::to_frame(line.end),line.content
+                Self::to_frame(line.start),Sub::to_frame(line.end),line.content
                 );
 
             writer.write(str.as_bytes())?;
@@ -154,8 +156,58 @@ impl Formatter for Ass{
         writer.write(b"Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")?;
 
         for line in subtitle.lines.iter(){
-            let str=Ass::format_line(&line);
+            let str=Self::format_line(&line);
             writer.write(str.as_bytes())?;
+        }
+        Ok(())
+    }
+
+}
+
+pub struct Vtt{
+}
+
+impl Vtt{
+    pub fn new()->Self{
+        Vtt{}
+    }
+
+    pub fn format_time(time: f64)-> String{
+        let hour = time as u64 /3600;
+        let minute = time as u64 /60 %60;
+        let second = time as u64 %60;
+        let ms = time.fract().mul_add(1000.,0.)as u64;
+        format!("{:0>2}:{:0>2}:{:0>2}.{:0>3}",hour,minute,second ,ms)
+    }
+
+    fn write_line(writer: &mut dyn Write,line: &Line) -> Result<(),Error>{
+        writer.write(format!("{} --> {}\n",Self::format_time(line.start),Self::format_time(line.end)).as_bytes())?;
+        let s = Regex::new("(&|<|>)").unwrap()
+            .replace_all(&line.content,|cap: &Captures|{
+                match &cap[0]{
+                    "&"=> "&amp;",
+                    "<"=> "&lt;",
+                    ">"=> "&gt;",
+                    _=> panic!("vtt"),
+                }
+            });
+        writer.write(s.as_bytes())?;
+        writer.write(b"\n\n")?;
+        Ok(())
+    }
+    
+}
+
+impl Formatter for Vtt{
+    fn ext(&self)->&str{
+        "vtt"
+    }
+
+    fn write(&mut self, writer: &mut dyn  Write, subtitle: CcSubtitle)-> Result<(),Error>{
+        writer.write(b"WEBVTT\n\n")?;
+
+        for line in subtitle.lines.iter(){
+            Self::write_line(writer,line)?;
         }
         Ok(())
     }

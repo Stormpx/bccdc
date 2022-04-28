@@ -42,7 +42,7 @@ Examples:
 
 Options:
     -d <directory> specify the output directory
-    -c <srt/ass> specify the subtitle format to convert. default: srt 
+    -c <srt/ass/vtt> specify the subtitle format to convert. default: srt 
     --doc use language_name as filename instead of language_tag. (take effect while downloading with bvid/epid)
     --proxy <http://host:port> use proxy");
 
@@ -200,6 +200,7 @@ fn new_formatter(config: &Config)-> Box<dyn Formatter>{
         "srt"=> Box::new(cc::Srt::new()), 
         "sub"=> Box::new(cc::Sub::new()),
         "ass"=> Box::new(cc::Ass::new()),
+        "vtt"=> Box::new(cc::Vtt::new()),
         other => {
             eprintln!("unsupported subtitle format {}",other);
             process::exit(1);
