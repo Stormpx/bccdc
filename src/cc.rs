@@ -21,7 +21,7 @@ pub trait Formatter{
 
     fn ext(&self)->&str;
 
-    fn write(&mut self, writer: &mut dyn  Write, subtitle: CcSubtitle)-> Result<(),Error>;
+    fn write(&mut self, writer: &mut dyn  Write, subtitle: &CcSubtitle)-> Result<(),Error>;
     
 }
 
@@ -50,7 +50,7 @@ impl Formatter for Srt{
         "srt"
     }
 
-    fn write(&mut self, writer: &mut dyn  Write, subtitle: CcSubtitle)-> Result<(),Error>{
+    fn write(&mut self, writer: &mut dyn  Write, subtitle: &CcSubtitle)-> Result<(),Error>{
         for (index, line ) in subtitle.lines.iter().enumerate(){
             let str=format!("{}\n\
                 {} --> {}\n\
@@ -91,7 +91,7 @@ impl Formatter for Sub{
         "sub"
     }
 
-    fn write(&mut self, writer: &mut dyn  Write, subtitle: CcSubtitle)-> Result<(),Error>{
+    fn write(&mut self, writer: &mut dyn  Write, subtitle: &CcSubtitle)-> Result<(),Error>{
         for  line  in subtitle.lines.iter(){
             let str=format!(
                 "{{{}}}{{{}}}{}\n\n",
@@ -150,7 +150,7 @@ impl Formatter for Ass{
         "ass"
     }
 
-    fn write(&mut self, writer: &mut dyn  Write, subtitle: CcSubtitle)-> Result<(),Error>{
+    fn write(&mut self, writer: &mut dyn  Write, subtitle: &CcSubtitle)-> Result<(),Error>{
         self.write_header(writer,&subtitle)?;
         writer.write(b"[Events]\n")?;
         writer.write(b"Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")?;
@@ -203,7 +203,7 @@ impl Formatter for Vtt{
         "vtt"
     }
 
-    fn write(&mut self, writer: &mut dyn  Write, subtitle: CcSubtitle)-> Result<(),Error>{
+    fn write(&mut self, writer: &mut dyn  Write, subtitle: &CcSubtitle)-> Result<(),Error>{
         writer.write(b"WEBVTT\n\n")?;
 
         for line in subtitle.lines.iter(){

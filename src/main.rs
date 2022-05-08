@@ -61,10 +61,11 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
         match value.as_str() {
             "-h"|"--help" => print_helps(),
             "-d" => {
-                work_dir= Path::new(&args.next().ok_or("-d requires parameter")?).to_path_buf();
+                let p = args.next().ok_or("-d requires parameter")?;
+                work_dir= Path::new(&p).to_path_buf();
             },
             "--proxy" =>{
-                proxy = Some(args.next().ok_or("--proxy requires parameter")?)
+                proxy = Some(args.next().ok_or("--proxy requires parameter")?);
             },
             "-c" =>{
                format = args.next().ok_or("-c requires parameter")?;
@@ -106,7 +107,99 @@ fn parse_range(string: &str)-> Result<lookup::Page,Box<dyn Error>>{
     
 }
 
-fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Context<'a>,Box<dyn Error>>{
+fn lookup_mixed_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Vec<Context<'a>>,Box<dyn Error>>{
+
+    let mut result = vec![];
+    let mut params = param.iter();
+
+    while let Some(mut val) = params.next(){
+        { 
+            let target= val.to_lowercase();
+            if target.starts_with("av") || target.starts_with("bv"){
+                let mut ranges = vec![];
+                let mut next_value = None;
+                //parse range  
+                while let Some(next) = params.next(){
+                    if let Ok(p)= parse_range(next){
+                       ranges.push(p);
+                    }else{
+                        next_value = Some(next);
+                        break;
+                    }
+                }
+
+                if ranges.is_empty(){
+                    ranges.push(lookup::Page::All);
+                }
+
+                let subtitles : Vec<cc::CcSubtitle> = lookup::lookup_video_id(val,ranges)?
+                    .into_iter()
+                    .flat_map(|vp| {
+                        let mut subs = vp.subtitles;
+                        for sub in subs.iter_mut(){
+                            config.determine_name(sub);    
+                            sub.name = format!("{}-{}",vp.p,sub.name);
+                        }
+                        subs
+                    })
+                    .collect();
+
+                result.push(Context {
+                        dir: Some(val),
+                        subtitles: subtitles
+                    });
+                if let Some(v)= next_value{
+                    val = v; 
+                }else{
+                    continue;
+                }
+ 
+            }else if target.starts_with("ep"){
+                let mut subtitles = lookup::lookup_ep_id(&target)?;
+                for sub in subtitles.iter_mut(){
+                    config.determine_name(sub);    
+                }
+
+                result.push(Context {
+                    dir: Some(val),
+                    subtitles:subtitles 
+                });
+                continue; 
+            }
+        }
+
+        let mut subtitle = None; 
+        if let Ok(url) = Url::parse(val){
+            match lookup::lookup_cc_api(&url){
+                Ok(sub) => subtitle = Some(sub),
+                Err(e) => eprintln!("fail to lookup {}: {}",url,e),
+            }
+
+        }else{
+        //fallback to 'path'
+            let path = Path::new(val);
+            match lookup::lookup_file(&path){
+                Ok(sub) => subtitle = Some(sub),
+                Err(e) => eprintln!("{}: {}",path.display(),e),
+            }
+
+        }
+        if let Some(subtitle) = subtitle{
+            result.push(Context { 
+                dir: None , 
+                subtitles: vec![subtitle],
+            })
+        }
+
+
+    }
+    Ok( result )
+
+}
+
+
+
+fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Vec<Context<'a>>,Box<dyn Error>>{
     let arg0= &param[0].trim();
     
     { 
@@ -132,20 +225,33 @@ fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Context
                     subs
                 })
                 .collect();
-            return Ok(Context {
+            return Ok(vec![
+                Context {
                     dir: Some(arg0),
                     subtitles: subtitles
-                });
+                }
+                ]);
  
         }else if target.starts_with("ep"){
-            let mut subtitles = lookup::lookup_ep_id(&target)?;
-            for sub in subtitles.iter_mut(){
-                config.determine_name(sub);    
-            }
-            return Ok(Context {
-                    dir: Some(arg0),
-                    subtitles:subtitles 
+            let mut result = vec![];
+            param.iter()
+                .for_each(|target| match lookup::lookup_ep_id(&target.to_lowercase()){
+                    Ok(mut subtitles)=>{
+                        for sub in subtitles.iter_mut(){
+                            config.determine_name(sub);    
+                        }
+
+                        result.push(Context {
+                            dir: Some(target),
+                            subtitles: subtitles
+                        });
+    
+                    },
+                    Err(e) => eprintln!("fail to lookup {}: {}",target,e),
                 });
+
+            return Ok(result);
+            
         }
     }
 
@@ -186,10 +292,10 @@ fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Context
             });
 
     }
-    Ok(Context { 
+    Ok(vec![Context { 
             dir: None , 
             subtitles: result,
-       })
+       }])
 
 
 }
@@ -242,37 +348,38 @@ fn main() {
                 if param.is_empty(){
                     continue;
                 }
-                let context = match lookup_param(&config,&mut param){
+                let contexts = match lookup_param(&config,&mut param){
                     Ok(v)=>v,
                     Err(e)=> {
                         eprintln!("{}",e);
                         process::exit(1);
                     }
                 };
-                write_context(&mut config,formatter.as_mut(),context);
+                contexts.iter().for_each(|context| write_context(&mut config,formatter.as_mut(),context));
             }else if let None = r {
                 eprintln!("fail to parse input.");
             }
 
         }
     }else{
-        let context = match lookup_param(&config,&mut param){
+        let contexts = match lookup_param(&config,&mut param){
             Ok(v)=>v,
             Err(e)=> {
                 eprintln!("{}",e);
                 process::exit(1);
             }
         };
-        write_context(&mut config,formatter.as_mut(),context);
+
+        contexts.iter().for_each(|context| write_context(&mut config,formatter.as_mut(),context));
     }
     
     
 }
 
-fn write_context(config: &mut Config, formatter: &mut dyn Formatter, context: Context){
+fn write_context(config: &mut Config, formatter: &mut dyn Formatter, context:&Context){
     let work_dir= &mut config.work_dir;
 
-    let subtitles = context.subtitles;
+    let subtitles = &context.subtitles;
     if subtitles.is_empty(){
         return; 
     }
@@ -308,7 +415,7 @@ fn write_context(config: &mut Config, formatter: &mut dyn Formatter, context: Co
      
 }
 
-fn write_subtitle_to_file(file_path: &Path,subtitle: cc::CcSubtitle, formatter: &mut dyn cc::Formatter)-> std::io::Result<()>{
+fn write_subtitle_to_file(file_path: &Path,subtitle: &cc::CcSubtitle, formatter: &mut dyn cc::Formatter)-> std::io::Result<()>{
   let mut file = fs::File::create(file_path)?;
   formatter.write(&mut file,subtitle)?;
   Ok(())
