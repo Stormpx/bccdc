@@ -12,6 +12,7 @@ struct Config{
     work_dir: PathBuf,
     format: String,
     doc: bool,
+    mixed: bool,
 }
 
 impl Config{
@@ -39,11 +40,13 @@ Examples:
     bccdc -d downloads/ BV1ns411D7NJ 1 3-4 # download BV1ns411D7NJ p1 p3 p4
     bccdc -d downloads/ ep475901
     bccdc -d downloads/ subtitle.json
+    bccdc --mixed -d dwonloads/ ep475901 BV1ns411D7NJ subtitle.json
 
 Options:
     -d <directory> specify the output directory
     -c <srt/ass/vtt> specify the subtitle format to convert. default: srt 
     --doc use language_name as filename instead of language_tag. (take effect while downloading with bvid/epid)
+    --mixed allow pass mixed arguments
     --proxy <http://host:port> use proxy");
 
     process::exit(0);
@@ -53,6 +56,7 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
     let mut work_dir = std::env::current_dir().expect("fail to get pwd.");
     let mut format= String::from("srt");
     let mut doc= false;
+    let mut mixed = false;
     let mut proxy: Option<String> = None;
     args.next();
     let mut arg = args.next();
@@ -70,6 +74,9 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
             "-c" =>{
                format = args.next().ok_or("-c requires parameter")?;
             },
+            "--mixed" =>{
+                mixed= true;
+            },
             "--doc" =>{
                 doc = true;
             },
@@ -84,7 +91,7 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
     
     bili::init_client(proxy)?;
 
-    Ok((Config{work_dir,format,doc},param))
+    Ok((Config{work_dir,format,doc,mixed},param))
 }
 
 fn parse_range(string: &str)-> Result<lookup::Page,Box<dyn Error>>{
@@ -111,11 +118,12 @@ fn lookup_mixed_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<V
 
     let mut result = vec![];
     let mut params = param.iter();
-
-    while let Some(mut val) = params.next(){
+    let mut val_opt = params.next();
+    while let Some(val) = val_opt {
         { 
             let target= val.to_lowercase();
             if target.starts_with("av") || target.starts_with("bv"){
+                
                 let mut ranges = vec![];
                 let mut next_value = None;
                 //parse range  
@@ -144,17 +152,20 @@ fn lookup_mixed_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<V
                     })
                     .collect();
 
-                result.push(Context {
+                 result.push(Context {
                         dir: Some(val),
                         subtitles: subtitles
-                    });
-                if let Some(v)= next_value{
-                    val = v; 
+                 });
+                if next_value.is_some(){
+                    val_opt=next_value;
                 }else{
-                    continue;
+                    val_opt=params.next();
                 }
+
+                continue;
  
-            }else if target.starts_with("ep"){
+            }
+            if target.starts_with("ep"){
                 let mut subtitles = lookup::lookup_ep_id(&target)?;
                 for sub in subtitles.iter_mut(){
                     config.determine_name(sub);    
@@ -164,6 +175,7 @@ fn lookup_mixed_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<V
                     dir: Some(val),
                     subtitles:subtitles 
                 });
+                val_opt = params.next();
                 continue; 
             }
         }
@@ -190,6 +202,8 @@ fn lookup_mixed_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<V
                 subtitles: vec![subtitle],
             })
         }
+
+        val_opt = params.next();
 
 
     }
@@ -348,7 +362,9 @@ fn main() {
                 if param.is_empty(){
                     continue;
                 }
-                let contexts = match lookup_param(&config,&mut param){
+
+                let result = if config.mixed{ lookup_mixed_param(&config,&mut param)}else{ lookup_param(&config,&mut param) };
+                let contexts = match result {
                     Ok(v)=>v,
                     Err(e)=> {
                         eprintln!("{}",e);
@@ -362,7 +378,8 @@ fn main() {
 
         }
     }else{
-        let contexts = match lookup_param(&config,&mut param){
+        let result = if config.mixed{ lookup_mixed_param(&config,&mut param)}else{ lookup_param(&config,&mut param) };
+        let contexts = match result {
             Ok(v)=>v,
             Err(e)=> {
                 eprintln!("{}",e);
