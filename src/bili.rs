@@ -9,6 +9,7 @@ use once_cell::sync::Lazy;
 static EP_URL: Lazy<Url> = Lazy::new(||  Url::parse("https://www.bilibili.com/bangumi/play/").unwrap());
 static PLAYER_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://api.bilibili.com/x/player/v2").unwrap());
 static PAGE_LIST_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://api.bilibili.com/x/player/pagelist").unwrap());
+static SEASON_SECTION_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://api.bilibili.com/pgc/web/season/section").unwrap());
 
 static HTTP_CLIENT: OnceCell<reqwest::blocking::Client> = OnceCell::new();
 
@@ -37,9 +38,12 @@ fn client()-> &'static reqwest::blocking::Client{
 struct BilibiliResult{
    code: i64,
    message: String,
-   ttl: u64,
+   ttl: Option<u64>,
    #[serde(default)]
    data: Value,
+   #[serde(default)]
+   result: Value,
+
 }
 
 impl BilibiliResult {
@@ -48,6 +52,12 @@ impl BilibiliResult {
             return Err(Box::from(self.message.to_string()));
         }
         Ok(&self.data)
+    }
+    fn result(&self)-> Result<&Value,Box<dyn Error>>{
+        if self.code != 0{
+            return Err(Box::from(self.message.to_string()));
+        }
+        Ok(&self.result)
     }
 }
 
@@ -76,6 +86,26 @@ pub struct PageInfo{
    pub part: String,
    pub duration: u64,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Episodes{
+    pub id: u64,
+    pub aid: u64,
+    pub cid: u64,
+    pub badge: Option<String>,
+    pub badge_info: Option<Value>,
+    pub badge_type: Option<u8>,
+    pub cover: Option<String>,
+    pub from: Option<String>,
+    pub is_premiere: Option<u8>,
+    pub long_title: Option<String>,
+    pub share_url: Option<String>,
+    pub status: Option<u8>,
+    pub title: Option<String>,
+    pub vid: Option<String>,
+
+}
+
 
 pub fn simple_http_get(url: &Url,query: &Vec<(&str,&str)> )-> Result<String,Box<dyn Error>>{
 
@@ -130,6 +160,19 @@ pub fn get_page_list(bvid: &str)-> Result<Vec<PageInfo>,Box<dyn Error>> {
     Ok(page_list) 
 }
 
+pub fn get_season_episodes(season_id: &u64) -> Result<Vec<Episodes>,Box<dyn Error>> {
+    let content= simple_http_get(&SEASON_SECTION_URL,&vec![("season_id",&season_id.to_string())])?;
+    let result: BilibiliResult = serde_json::from_str(&content)?;
+    
+    let result = result.result()?;
+    let main_section = result["main_section"].as_object().ok_or::<Box<dyn Error>>("main_section".into())?;
+    let episodes =  &main_section["episodes"];
+
+    let eps  = Vec::<Episodes>::deserialize(episodes)?; 
+    Ok(eps)
+
+}
+
 #[cfg(test)]
 mod tests{
     use crate::bili;
@@ -164,6 +207,34 @@ mod tests{
         assert_eq!(page.page,1);
         assert_eq!(page.part, "PP02_Haishin_R.encoded");
         assert_eq!(page.duration,1421);
+    }
+    #[test]
+    fn season_section(){
+        let test_case: [(u64,u64);13] =  [
+            (11931200,19695814),
+            (209041759,19695821),
+            (294034570,19695822),
+            (591600094,19695823),
+            (634103120,19695815),
+            (379112581,19695824),
+            (721602076,19695816),
+            (464008075,19695825),
+            (676602083,19695817),
+            (764081645,19695818),
+            (721608355,19695819),
+            (719079280,19695813),
+            (934101570,19695820),
+        ];
+        let season_id= 752;
+
+        let eps = bili::get_season_episodes(&season_id).unwrap();
+
+        for (i,ep) in eps.iter().enumerate(){
+            assert_eq!(ep.aid,test_case[i].0);
+            assert_eq!(ep.cid,test_case[i].1);
+        }
+
+
     }
     
 }

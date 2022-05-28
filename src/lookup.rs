@@ -185,7 +185,7 @@ mod tests{
         assert_eq!("花蕾 石屑 又一輪循環",&line.content);
         assert_eq!(1341.19,line.start);
         assert_eq!(1343.27,line.end);
-        tempfile.close();
+        tempfile.close().expect("");
     }
 
     #[test]
