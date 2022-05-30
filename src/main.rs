@@ -34,13 +34,14 @@ struct Context<'a>{
 
 fn print_helps(){
 
-    println!("Usage: bccdc [option..] <bvid/epid/bcc_url/bcc_file>
+    println!("Usage: bccdc [option..] <avid/bvid/mdid/epid/bcc_url/bcc_file>
 
 Examples:
     bccdc -d downloads/ BV1ns411D7NJ 1 3-4 # download BV1ns411D7NJ p1 p3 p4
+    bccdc -d downloads/ md28237168 2-3 9 # download md28237168 ep2 ep3 ep9
     bccdc -d downloads/ ep475901
     bccdc -d downloads/ subtitle.json
-    bccdc --mixed -d dwonloads/ ep475901 BV1ns411D7NJ subtitle.json
+    bccdc --mixed -d dwonloads/ ep475901 BV1ns411D7NJ 3-4 md28237168 9 subtitle.json
 
 Options:
     -d <directory> specify the output directory
