@@ -110,7 +110,7 @@ fn find_id(ep_html: &str)-> Option<(String,u64)>{
 }
 
 fn get_subtitles(bvid: &str,cid: u64,page: u32)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
-    let list= bili::get_subtitle_list(&bvid,cid)?;
+    let list= bili::get_subtitle_list(&bvid,&cid)?;
 
     let mut result = Vec::new();
     for info in list {
@@ -134,7 +134,6 @@ fn get_subtitles(bvid: &str,cid: u64,page: u32)-> Result<Vec<CcSubtitle>,Box<dyn
 pub fn lookup_ep_id(id: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
     let content=bili::get_ep_html(id)?;
 
-    //println!("{}",content);
     let (bvid,cid) = find_id(&content).ok_or::<Box<dyn Error>>(format!("unable find bvid and cid by {}",id).into())?;
 
     get_subtitles(&bvid,cid,1)
@@ -142,17 +141,19 @@ pub fn lookup_ep_id(id: &str)-> Result<Vec<CcSubtitle>,Box<dyn Error>>{
 }
 
 pub fn lookup_video_id(id: &str,interested: Vec<Page>)-> Result<Vec<VideoPage>,Box<dyn Error>>{
-    if id.starts_with("av"){
-        
+    let mut bvid = id.to_string();
+    if bvid.starts_with("av"){
+        let aid = id[2..].parse::<u64>()?;
+        bvid = bili::av_to_bv(&aid);
     }
 
-    let page_list = bili::get_page_list(id)?;
+    let page_list = bili::get_page_list(&bvid.trim())?;
 
     let vsubs : Vec<VideoPage>= page_list.iter()
         .filter(|page| interested.iter().any(|range| range.test(&page.page)))
         .map(|page| { 
             
-            let r = get_subtitles(id,page.cid,page.page)
+            let r = get_subtitles(&bvid,page.cid,page.page)
                 .map(|subs| VideoPage{p: page.page,subtitles: subs});
 
             if let Err(ref e) = r{
@@ -166,6 +167,29 @@ pub fn lookup_video_id(id: &str,interested: Vec<Page>)-> Result<Vec<VideoPage>,B
         .collect();
 
     Ok(vsubs)    
+}
+
+pub fn lookup_media_id(id:&str,interested: Vec<Page>)-> Result<Vec<VideoPage>,Box<dyn Error>>{
+    let season_id = bili::get_season_id(id)?;
+    
+    let episodes = bili::get_season_episodes(&season_id)?;
+
+    let r = episodes.iter().enumerate()
+        .filter(|(index,_ep)| interested.iter().any(|range| range.test(&((index+1) as u32))))
+        .map(|(index,ep)| {
+            let bvid = bili::av_to_bv(&ep.aid);
+            let p = (index+1) as u32;
+            let r = get_subtitles(&bvid,ep.cid,p)
+                .map(|subs| VideoPage{p:p,subtitles: subs});
+            if let Err(ref e) = r{
+                eprintln!("fail to get subtitle. cause: {}",e);
+            }
+            r
+        })
+        .filter(|r| r.is_ok())
+        .map(|r| r.unwrap())
+        .collect();
+    Ok(r)
 }
 
 #[cfg(test)]
