@@ -122,7 +122,7 @@ fn lookup_mixed_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<V
     while let Some(val) = val_opt {
         { 
             let target= val.to_lowercase();
-            if target.starts_with("av") || target.starts_with("bv"){
+            if target.starts_with("av") || target.starts_with("bv") || target.starts_with("md"){
                 
                 let mut ranges = vec![];
                 let mut next_value = None;
@@ -140,8 +140,13 @@ fn lookup_mixed_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<V
                     ranges.push(lookup::Page::All);
                 }
 
-                let subtitles : Vec<cc::CcSubtitle> = lookup::lookup_video_id(val,ranges)?
-                    .into_iter()
+                let vps = if target.starts_with("md"){
+                    lookup::lookup_media_id(val,ranges)?
+                }else{
+                    lookup::lookup_video_id(val,ranges)?
+                };
+
+                let subtitles : Vec<cc::CcSubtitle> = vps.into_iter()
                     .flat_map(|vp| {
                         let mut subs = vp.subtitles;
                         for sub in subs.iter_mut(){
@@ -164,6 +169,9 @@ fn lookup_mixed_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<V
 
                 continue;
  
+            }
+            if target.starts_with("md"){
+
             }
             if target.starts_with("ep"){
                 let mut subtitles = lookup::lookup_ep_id(&target)?;
@@ -218,7 +226,7 @@ fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Vec<Con
     
     { 
         let target= arg0.to_lowercase();
-        if target.starts_with("av") || target.starts_with("bv"){
+        if target.starts_with("av") || target.starts_with("bv") || target.starts_with("md"){
 
             let mut ranges = param.iter()
                 .skip(1)
@@ -228,8 +236,13 @@ fn lookup_param<'a>(config: &Config, param: &'a mut Vec<String>)->Result<Vec<Con
             if ranges.is_empty(){
                 ranges= vec![lookup::Page::All];
             }
-            let subtitles : Vec<cc::CcSubtitle> = lookup::lookup_video_id(arg0,ranges)?
-                .into_iter()
+            let vps = if target.starts_with("md"){ 
+                lookup::lookup_media_id(arg0,ranges)?
+            } else {
+                lookup::lookup_video_id(arg0,ranges)?
+            };
+
+            let subtitles : Vec<cc::CcSubtitle> = vps.into_iter()
                 .flat_map(|vp| {
                     let mut subs = vp.subtitles;
                     for sub in subs.iter_mut(){
