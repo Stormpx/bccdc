@@ -11,9 +11,14 @@ Options:
     --doc use language_name as filename instead of language_tag. (take effect while downloading with bvid/epid)
     --mixed allow pass mixed arguments
     --proxy <http://host:port> use proxy
+    --header <key:value> pass custom header to server
 ```
 
 # 示例
+由于B站修改了策略(登录后才能看到字幕)，现在得通过`--header`选项来将cookie传过去才能获取到字幕
+
+    bccdc -d downloads/ --header cookie:SESSDATA=*** BV1mT42127CQ
+
 如果想下载某个视频的字幕可以直接将 `BVID` 作为参数传入
 
     bccdc -d downloads/ BV1kv411P7Ek
