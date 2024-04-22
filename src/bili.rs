@@ -1,5 +1,6 @@
 use url::{Url};
 use reqwest::header;
+use std::collections::HashMap;
 use std::error::Error;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -19,14 +20,29 @@ static PAGE_LIST_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://api.bilibili.
 static SEASON_SECTION_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://api.bilibili.com/pgc/web/season/section").unwrap());
 
 static HTTP_CLIENT: OnceCell<reqwest::blocking::Client> = OnceCell::new();
+static HTTP_HEADERS: OnceCell<HashMap<String,Vec<String>>> = OnceCell::new();
 
-pub fn init_client(proxy: Option<String>) -> Result<(),Box<dyn Error>>{
+pub fn init_client(proxy: Option<String>,headers: HashMap<String,Vec<String>>) -> Result<(),Box<dyn Error>>{
     let mut  builder = reqwest::blocking::Client::builder()
         .gzip(true);
         
     if let Some(proxy)= proxy{
         builder = builder.proxy(reqwest::Proxy::all(proxy)?);
     }
+    if !headers.is_empty() {
+        
+        let headers = HTTP_HEADERS.get_or_init(|| headers);
+        let mut http_headers = header::HeaderMap::new();
+        http_headers.insert(header::USER_AGENT,header::HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0"));
+        
+        for (key, val) in headers.iter() {
+            http_headers.insert(key.as_str(), header::HeaderValue::from_str(val.join(";").as_str()).unwrap());    
+        }
+
+        builder = builder.default_headers(http_headers);
+        
+    }
+
 
     let client = builder.build()?;
     HTTP_CLIENT.set(client).unwrap();

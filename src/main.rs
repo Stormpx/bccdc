@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::{process,io,fs};
 use url::{Url};
 use std::path::{Path,PathBuf};
@@ -37,6 +38,7 @@ fn print_helps(){
     println!("Usage: bccdc [option..] <avid/bvid/mdid/epid/bcc_url/bcc_file>
 
 Examples:
+    bccdc -d downloads/ --header 'cookie:value' BV1mT42127CQ
     bccdc -d downloads/ BV1ns411D7NJ 1 3-4 # download BV1ns411D7NJ p1 p3 p4
     bccdc -d downloads/ md28237168 2-3 9 # download md28237168 ep2 ep3 ep9
     bccdc -d downloads/ ep475901
@@ -48,7 +50,9 @@ Options:
     -c <srt/ass/vtt> specify the subtitle format to convert. default: srt 
     --doc use language_name as filename instead of language_tag. (take effect while downloading with bvid/epid)
     --mixed allow pass mixed arguments
-    --proxy <http://host:port> use proxy");
+    --proxy <http://host:port> use proxy
+    --header <key:value> pass custom header to server"
+);
 
     process::exit(0);
 }
@@ -59,6 +63,7 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
     let mut doc= false;
     let mut mixed = false;
     let mut proxy: Option<String> = None;
+    let mut headers: HashMap<String,Vec<String>> = HashMap::new();
     args.next();
     let mut arg = args.next();
     let mut param: Vec<String> = Vec::new();
@@ -71,6 +76,16 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
             },
             "--proxy" =>{
                 proxy = Some(args.next().ok_or("--proxy requires parameter")?);
+            },
+            "-H"|"--header"=>{
+                let kv = args.next().ok_or("--header requires parameter")?;
+                let split = kv.split_once(":").ok_or("--header requires pattern key:value")?;
+                match headers.get_mut(split.0) {
+                    Some(vals)=> vals.push(split.1.to_string()),
+                    None=>{
+                        headers.insert(split.0.to_string(), vec![split.1.to_string()]);
+                    }
+                }
             },
             "-c" =>{
                format = args.next().ok_or("-c requires parameter")?;
@@ -90,7 +105,7 @@ fn parse_args(args: &mut std::env::Args)-> Result<(Config,Vec<String>),Box<dyn E
         arg=args.next();
     }
     
-    bili::init_client(proxy)?;
+    bili::init_client(proxy,headers)?;
 
     Ok((Config{work_dir,format,doc,mixed},param))
 }
