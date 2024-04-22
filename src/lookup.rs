@@ -94,14 +94,21 @@ fn find_id(ep_html: &str)-> Option<(String,u64)>{
 
     for value in stream {
         if let Ok(json) = value{
+            // println!("{}",json.to_string());
             if let  Value::Object(ep_info) = &json["epInfo"]{
-                let  bvid= &ep_info["bvid"].as_str();
+                let bvid= &ep_info["bvid"].as_str();
                 let cid = &ep_info["cid"].as_u64();
                 if bvid.is_some() && cid.is_some(){
                    return Some((bvid.unwrap().to_string(),cid.unwrap())); 
                 }
+            }else if let Value::Object(video_data) = &json["videoData"]{
+                let bvid= &video_data["bvid"].as_str();
+                let cid = &video_data["cid"].as_u64();
+                
+                if bvid.is_some() && cid.is_some(){
+                   return Some((bvid.unwrap().to_string(),cid.unwrap())); 
+                }
             }
-
         }
     }
 
@@ -217,6 +224,13 @@ mod tests{
         let content = "</script><script>window.__INITIAL_STATE__={\"epInfo\":{\"aid\":937924663,\"badge\":\"会员\",\"badge_info\":{\"bg_color\":\"#FB7299\",\"bg_color_night\":\"#BB5B76\",\"text\":\"会员\"},\"badge_type\":0,\"bvid\":\"BV1zT4y1v7kC\",\"cid\":569612278,\"cover\":\"\\u002F\\u002Fi0.hdslb.com\\u002Fbfs\\u002Farchive\\u002Ff5e5f123aef7399156a6fe74d4cb7aaf97604a20.png\",\"dimension\":{\"height\":1080,\"rotate\":0,\"width\":1920},\"duration\":1421000,\"from\":\"bangumi\",\"id\":475899,\"is_view_hide\":false,\"link\":\"https:\\u002F\\u002Fwww.bilibili.com\\u002Fbangumi\\u002Fplay\\u002Fep475899\",\"long_title\":\"孔明 施展計謀\",\"pub_time\":1649340000,\"pv\":0,\"release_date\":\"\",\"rights\":{\"allow_demand\":0,\"allow_dm\":1,\"allow_download\":0,\"area_limit\":0},\"share_copy\":\"《派對咖孔明（僅限港澳台地區）》第2话 孔明 施展計謀\",\"share_url\":\"https:\\u002F\\u002Fwww.bilibili.com\\u002Fbangumi\\u002Fplay\\u002Fep475899\",\"short_link\":\"https:\\u002F\\u002Fb23.tv\\u002Fep475899\",\"status\":13,\"subtitle\":\"已观看18万次\",\"title\":\"2\",\"vid\":\"\",\"loaded\":true,\"badgeType\":0,\"badgeColor\":\"#FB7299\",\"epStatus\":13,\"titleFormat\":\"第2话\",\"longTitle\":\"孔明 施展計謀\",\"sectionType\":0,\"releaseDate\":\"\",\"skip\":{},\"stat\":{},\"orderSectionIds\":[],\"hasNext\":false,\"hasSkip\":false,\"i\":1}};(function(){vars;(s=document.currentScript||document.scripts[document.scripts.length-1]).parentNode.removeChild(s);}());</script><scripttype=\"text/javascript\">";
 
         assert_eq!(lookup::find_id(content),Some((String::from("BV1zT4y1v7kC"),569612278)));
+    }
+
+    #[test]
+    fn find_id_test1(){
+        let content = "</script><script>window.__INITIAL_STATE__={\"aid\":1703355805,\"bvid\":\"BV1mT42127CQ\",\"p\":1,\"episode\":\"\",\"videoData\":{\"bvid\":\"BV1mT42127CQ\",\"aid\":1703355805,\"videos\":1,\"tid\":201,\"tname\":\"科学科普\",\"copyright\":2,\"pic\":\"http://i1.hdslb.com/bfs/archive/4786b7bc4a268ea0bb31bf66be6aa6eee1a04c33.png\",\"title\":\"【地理】直布罗陀海峡形成与地中海的滔天洪水\",\"pubdate\":1713668408,\"ctime\":1713622289,\"desc\":\"530万年前，一次大冰期导致了海平面下降，地中海与大西洋沟通消失，75%的地中海蒸发演变为沙漠。当冰期结束海平面再次上升,形成了直布罗陀瀑布,从最初涓流细流到冲刷出了一道越来越深的缺口用了数千年，最后，当直布罗陀变成了亚马逊河流量的1000倍的巨大瀑布时，仅用几个月将地中海90%的面积填满。【地址】https://youtu.be/_RSPgIcnRN0\",\"desc_v2\":[{\"raw_text\":\"530万年前，一次大冰期导致了海平面下降，地中海与大西洋沟通消失，75%的地中海蒸发演变为沙漠。当冰期结束海平面再次上升,形成了直布罗陀瀑布,从最初涓流细流到冲刷出了一道越来越深的缺口用了数千年，最后，当直布罗陀变成了亚马逊河流量的1000倍的巨大瀑布时，仅用几个月将地中海90%的面积填满。【地址】https://youtu.be/_RSPgIcnRN0\",\"type\":1,\"biz_id\":0}],\"state\":0,\"duration\":794,\"argue_info\":{\"argue_msg\":\"\",\"argue_type\":0,\"argue_link\":\"\"},\"dynamic\":\"\",\"cid\":1514080023,\"dimension\":{\"width\":1280,\"height\":720,\"rotate\":0},\"season_id\":2545199,\"premiere\":null,\"teenage_mode\":0,\"is_chargeable_season\":false,\"is_story\":false,\"is_upower_exclusive\":false,\"is_upower_play\":false,\"is_upower_preview\":false,\"enable_vt\":0,\"vt_display\":\"\",\"no_cache\":false,\"is_season_display\":true,\"user_garb\":{\"url_image_ani_cut\":\"\"},\"honor_reply\":{},\"like_icon\":\"\",\"need_jump_bv\":false,\"disable_show_up_info\":false,\"is_story_play\":1},\"isCollection\":0,\"sectionsInfo\":{\"id\":2545199,\"title\":\"地理* 海陆变迁与板块构造\",\"cover\":\"https://s1.hdslb.com/bfs/templar/york-static/viedeo_material_default.png\",\"mid\":224888695,\"intro\":\"\",\"sign_state\":0,\"attribute\":140,\"sections\":[],\"stat\":{\"season_id\":2545199,\"view\":1506470,\"danmaku\":8664,\"reply\":5305,\"fav\":25040,\"coin\":7379,\"share\":3511,\"now_rank\":0,\"his_rank\":0,\"like\":38670,\"vt\":0,\"vv\":0},\"ep_count\":42,\"season_type\":1,\"is_pay_season\":false,\"enable_vt\":0},\"playedSectionId\":[],\"sections\":[],\"staffData\":[],\"isClient\":false,\"error\":{},\"player\":null,\"playurl\":{},\"user\":{},\"cidMap\":{\"1703355805\":{\"aid\":1703355805,\"bvid\":\"BV1mT42127CQ\",\"cids\":{\"1\":1514080023}},\"BV1mT42127CQ\":{\"aid\":1703355805,\"bvid\":\"BV1mT42127CQ\",\"cids\":{\"1\":1514080023}}},\"isRecAutoPlay\":false,\"continuousPlay\":true,\"autoPlayNextVideo\":null,\"elecFullInfo\":{},\"emergencyBan\":{\"no_like\":false,\"no_coin\":false,\"no_fav\":false,\"no_share\":false},\"isModern\":true,\"playerReloadOrigin\":\"\",\"queryTags\":[],\"nanoTheme\":{\"bpx-primary-color\":\"var(--brand_blue)\",\"bpx-fn-color\":\"var(--brand_blue)\",\"bpx-fn-hover-color\":\"var(--brand_blue)\",\"bpx-box-shadow\":\"var(--bg3)\",\"bpx-dmsend-switch-icon\":\"var(--text2)\",\"bpx-dmsend-hint-icon\":\"var(--graph_medium)\",\"bpx-aux-header-icon\":\"var(--graph_icon)\",\"bpx-aux-float-icon\":\"var(--graph_icon)\",\"bpx-aux-block-icon\":\"var(--text3)\",\"bpx-dmsend-info-font\":\"var(--text2)\",\"bpx-dmsend-input-font\":\"var(--text1)\",\"bpx-dmsend-hint-font\":\"var(--text3)\",\"bpx-aux-header-font\":\"var(--text1)\",\"bpx-aux-footer-font\":\"var(--text2)\",\"bpx-aux-footer-font-hover\":\"var(--text1)\",\"bpx-aux-content-font1\":\"var(--text1)\",\"bpx-aux-content-font2\":\"var(--text2)\",\"bpx-aux-content-font3\":\"var(--text2)\",\"bpx-aux-content-font4\":\"var(--text3)\",\"bpx-aux-content-font5\":\"var(--text3)\",\"bpx-dmsend-main-bg\":\"var(--bg1)\",\"bpx-dmsend-input-bg\":\"var(--bg3)\",\"bpx-aux-header-bg\":\"var(--graph_bg_regular)\",\"bpx-aux-footer-bg\":\"var(--graph_bg_regular)\",\"bpx-aux-content-bg\":\"var(--bg1)\",\"bpx-aux-button-bg\":\"var(--bg3)\",\"bpx-aux-button-disabled-bg\":\"var(--graph_bg_thin)\",\"bpx-aux-float-bg\":\"var(--bg1_float)\",\"bpx-aux-float-hover-bg\":\"var(--graph_medium)\",\"bpx-aux-cover-bg\":\"var(--graph_weak)\",\"bpx-dmsend-border\":\"var(--bg3)\",\"bpx-aux-float-border\":\"var(--line_light)\",\"bpx-aux-line-border\":\"var(--line_regular)\",\"bpx-aux-input-border\":\"var(--line_regular)\"},\"enable_vt\":0,\"defaultWbiKey\":{\"wbiImgKey\":\"2590160e9f5142d4a501feda0490f3bd\",\"wbiSubKey\":\"34ba9c5c4a824b368e9c053be34016bd\"},\"bmpDefDomain\":\"\",\"loadingRcmdTabData\":false,\"rcmdTabData\":{\"tab_name\":\"全部\",\"archives\":[],\"has_more\":false},\"rcmdTabNames\":[\"科学\",\"科普\",\"灾难\",\"地理\",\"古地理\",\"地质巨变\",\"洪水\",\"地中海\"],\"currentRcmdTab\":{\"tab_name\":\"全部\",\"tab_order\":0,\"tab_type\":1}}";
+
+        assert_eq!(lookup::find_id(content),Some((String::from("BV1mT42127CQ"),1514080023)));
     }
 }
 
